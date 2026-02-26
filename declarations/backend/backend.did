@@ -1,0 +1,52 @@
+type WebLink = 
+ record {
+   description: text;
+   id: nat;
+   title: text;
+   url: text;
+ };
+type UserRole = 
+ variant {
+   admin;
+   guest;
+   user;
+ };
+type UserProfile = record {name: text;};
+type Time = int;
+type CaffeineInfo = 
+ record {
+   content: text;
+   lastUpdated: Time;
+ };
+type BlogPost = 
+ record {
+   author: principal;
+   content: text;
+   id: nat;
+   timestamp: Time;
+   title: text;
+ };
+service : {
+  addBlogPost: (title: text, content: text) -> ();
+  addWebLink: (title: text, url: text, description: text) -> ();
+  assignCallerUserRole: (user: principal, role: UserRole) -> ();
+  deleteBlogPost: (id: nat) -> ();
+  deleteWebLink: (id: nat) -> ();
+  editBlogPost: (id: nat, title: text, content: text) -> ();
+  editWebLink: (id: nat, title: text, url: text, description: text) -> ();
+  getAllAdminPrincipals: () -> (vec principal) query;
+  getAllBlogPosts: () -> (vec BlogPost) query;
+  getAllWebLinks: () -> (vec WebLink) query;
+  getCaffeineInfo: () -> (opt CaffeineInfo) query;
+  getCallerUserProfile: () -> (opt UserProfile) query;
+  getCallerUserRole: () -> (UserRole) query;
+  getOrderedWebLinks: () -> (vec WebLink) query;
+  getUserProfile: (user: principal) -> (opt UserProfile) query;
+  getVisitCount: () -> (nat) query;
+  incrementVisitCount: () -> ();
+  initializeAccessControl: () -> ();
+  isCallerAdmin: () -> (bool) query;
+  reorderWebLinks: (newOrder: vec nat) -> ();
+  saveCallerUserProfile: (profile: UserProfile) -> ();
+  updateCaffeineInfo: (content: text) -> ();
+}
