@@ -17,11 +17,7 @@ import {
 export default function App() {
   const { identity, isInitializing } = useInternetIdentity();
   const { actor } = useActor(createActor);
-  const {
-    data: isAdmin = false,
-    isLoading: adminLoading,
-    refetch: refetchAdmin,
-  } = useIsCallerAdmin();
+  const { data: isAdmin = false, refetch: refetchAdmin } = useIsCallerAdmin();
   const { data: headingConfig } = useGetHeadingConfig();
   const incrementVisitCount = useIncrementVisitCount();
   const hasIncrementedRef = useRef(false);
@@ -37,13 +33,16 @@ export default function App() {
   useEffect(() => {
     if (identity && actor && !hasBootstrappedRef.current) {
       hasBootstrappedRef.current = true;
-      actor
-        .initializeAccessControl()
-        .then(() => refetchAdmin())
-        .catch((err: unknown) => {
+      (async () => {
+        try {
+          await actor.initializeAccessControl();
+        } catch (err: unknown) {
           console.warn("initializeAccessControl (non-fatal):", err);
-          refetchAdmin();
-        });
+        }
+        // Always refetch after bootstrap attempt so admin state is fresh
+        // before the Access Denied banner can render
+        await refetchAdmin();
+      })();
     }
     if (!identity) {
       hasBootstrappedRef.current = false;
@@ -143,7 +142,7 @@ export default function App() {
     }
   };
 
-  if (isInitializing || (isAuthenticated && adminLoading)) {
+  if (isInitializing) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-slate-300">Loading...</div>

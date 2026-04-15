@@ -70,6 +70,7 @@ export function useIsCallerAdmin() {
       return actor.isCallerAdmin();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 5 * 60 * 1000, // 5 minutes — prevents frequent refetch that blocks loading gate
   });
 }
 
@@ -274,6 +275,8 @@ export function useGetAllWebLinks() {
       return actor.getOrderedWebLinks();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
   });
 }
 
