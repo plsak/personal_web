@@ -9,7 +9,10 @@ import AccessControl "authorization/access-control";
 
 
 
-actor {
+
+
+
+actor Self {
     // ── Access control ────────────────────────────────────────────────────────
 
     public type UserRole = AccessControl.UserRole;
@@ -68,6 +71,85 @@ actor {
 
     public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
         userProfiles.add(caller, profile);
+    };
+
+    // ── Canister IDs ──────────────────────────────────────────────────────────
+
+    stable var frontendCanisterId : Text = "";
+
+    public shared query func getBackendCanisterId() : async Text {
+        Principal.fromActor(Self).toText();
+    };
+
+    public shared query func getFrontendCanisterId() : async Text {
+        frontendCanisterId;
+    };
+
+    public shared ({ caller }) func setFrontendCanisterId(id : Text) : async () {
+        if (not isAdmin(caller)) {
+            Runtime.trap("Unauthorized: Only admins can set frontend canister ID");
+        };
+        frontendCanisterId := id;
+    };
+
+    // ── Section names ─────────────────────────────────────────────────────────
+
+    stable var sectionNameAbout : Text = "About";
+    stable var sectionNameBlog : Text = "Blog";
+    stable var sectionNameLinks : Text = "Links";
+    // ── Section order & visibility ───────────────────────────────────────────
+
+    stable var sectionOrder : [Text] = ["about", "links", "blog"];
+    stable var sectionVisibilityAbout : Bool = true;
+    stable var sectionVisibilityBlog : Bool = true;
+    stable var sectionVisibilityLinks : Bool = true;
+
+    public shared query func getSectionOrder() : async [Text] {
+        sectionOrder;
+    };
+
+    public shared ({ caller }) func setSectionOrder(order : [Text]) : async () {
+        if (not isAdmin(caller)) {
+            Runtime.trap("Unauthorized: Only admins can set section order");
+        };
+        if (order.size() != 3) {
+            Runtime.trap("Section order must contain exactly 3 items");
+        };
+        let valid = ["about", "links", "blog"];
+        for (item in order.vals()) {
+            let found = valid.filter(func(v : Text) : Bool { v == item });
+            if (found.size() == 0) {
+                Runtime.trap("Invalid section name: " # item);
+            };
+        };
+        sectionOrder := order;
+    };
+
+    public shared query func getSectionVisibility() : async { about : Bool; blog : Bool; links : Bool } {
+        { about = sectionVisibilityAbout; blog = sectionVisibilityBlog; links = sectionVisibilityLinks };
+    };
+
+    public shared ({ caller }) func setSectionVisibility(visibility : { about : Bool; blog : Bool; links : Bool }) : async () {
+        if (not isAdmin(caller)) {
+            Runtime.trap("Unauthorized: Only admins can set section visibility");
+        };
+        sectionVisibilityAbout := visibility.about;
+        sectionVisibilityBlog := visibility.blog;
+        sectionVisibilityLinks := visibility.links;
+    };
+
+    public shared query func getSectionNames() : async { about : Text; blog : Text; links : Text } {
+        { about = sectionNameAbout; blog = sectionNameBlog; links = sectionNameLinks };
+    };
+
+    public shared ({ caller }) func setSectionName(section : Text, name : Text) : async () {
+        if (not isAdmin(caller)) {
+            Runtime.trap("Unauthorized: Only admins can set section names");
+        };
+        if (section == "about") { sectionNameAbout := name }
+        else if (section == "blog") { sectionNameBlog := name }
+        else if (section == "links") { sectionNameLinks := name }
+        else { Runtime.trap("Unknown section: " # section) };
     };
 
     // ── Blog posts ────────────────────────────────────────────────────────────
@@ -243,6 +325,7 @@ actor {
         title : Text;
         content : Text;
         order : Nat;
+        mediaUrl : ?Text;
     };
 
     let caffeineInfoScreens = Map.empty<Text, CaffeineInfoScreenRecord>();
@@ -278,6 +361,21 @@ actor {
         };
     };
 
+    public shared ({ caller }) func reorderCaffeineInfoScreens(newOrder : [Text]) : async () {
+        if (not isAdmin(caller)) {
+            Runtime.trap("Unauthorized: Only admins can reorder info screens");
+        };
+        for (i in newOrder.keys()) {
+            let id = newOrder[i];
+            switch (caffeineInfoScreens.get(id)) {
+                case null { Runtime.trap("Invalid info screen ID in new order: " # id) };
+                case (?screen) {
+                    caffeineInfoScreens.add(id, { screen with order = i });
+                };
+            };
+        };
+    };
+
     // ── Admin management ──────────────────────────────────────────────────────
 
     public query func getAllAdminPrincipals() : async [Principal] {
@@ -292,7 +390,7 @@ actor {
 
     // ── Visit counter ─────────────────────────────────────────────────────────
 
-    var visitCount : Nat = 0;
+    stable var visitCount : Nat = 0;
 
     public shared func incrementVisitCount() : async () {
         visitCount += 1;
@@ -301,6 +399,25 @@ actor {
     public query func getVisitCount() : async Nat {
         visitCount;
     };
+    // ── Site statistics ───────────────────────────────────────────────────────
+
+    public type SiteStatistics = {
+        visitCount : Nat;
+        linksCount : Nat;
+        blogPostsCount : Nat;
+        infoScreensCount : Nat;
+        backendCanisterId : Text;
+    };
+
+    public query func getSiteStatistics() : async SiteStatistics {
+        {
+            visitCount;
+            linksCount = webLinks.size();
+            blogPostsCount = blogPosts.size();
+            infoScreensCount = caffeineInfoScreens.size();
+            backendCanisterId = Principal.fromActor(Self).toText();
+        };
+    };
 
     // ── Heading config ────────────────────────────────────────────────────────
 
@@ -308,22 +425,59 @@ actor {
         text : Text;
         font : Text;
         color : Text;
+        backgroundColor : ?Text;
+        backgroundImageUrl : ?Text;
     };
 
     var headingConfig : HeadingConfig = {
-        text = "plsak with caffeine.ai";
+        text = "";
         font = "default";
         color = "#ffffff";
+        backgroundColor = null;
+        backgroundImageUrl = null;
+    };
+
+    public type BackgroundConfig = {
+        pageBackgroundColor : ?Text;
+        pageBackgroundImageUrl : ?Text;
+        aboutCardColor : ?Text;
+        aboutCardImageUrl : ?Text;
+        blogCardColor : ?Text;
+        blogCardImageUrl : ?Text;
+        linksCardColor : ?Text;
+        linksCardImageUrl : ?Text;
+    };
+
+    var backgroundConfig : BackgroundConfig = {
+        pageBackgroundColor = null;
+        pageBackgroundImageUrl = null;
+        aboutCardColor = null;
+        aboutCardImageUrl = null;
+        blogCardColor = null;
+        blogCardImageUrl = null;
+        linksCardColor = null;
+        linksCardImageUrl = null;
     };
 
     public query func getHeadingConfig() : async HeadingConfig {
         headingConfig;
     };
 
-    public shared ({ caller }) func updateHeadingConfig(text : Text, font : Text, color : Text) : async () {
+    public shared ({ caller }) func updateHeadingConfig(text : Text, font : Text, color : Text, backgroundColor : ?Text, backgroundImageUrl : ?Text) : async () {
         if (not isAdmin(caller)) {
             Runtime.trap("Unauthorized: Only admins can update heading config");
         };
-        headingConfig := { text; font; color };
+        headingConfig := { text; font; color; backgroundColor; backgroundImageUrl };
+    };
+
+    public query func getBackgroundConfig() : async BackgroundConfig {
+        backgroundConfig;
+    };
+
+    public shared ({ caller }) func updateBackgroundConfig(config : BackgroundConfig) : async () {
+        if (not isAdmin(caller)) {
+            Runtime.trap("Unauthorized: Only admins can update background config");
+        };
+        backgroundConfig := config;
     };
 };

@@ -1,0 +1,24 @@
+{
+  "overview": "A personal website and blog deployed on the Internet Computer. Supports dynamic content (About with info screens, Blog, Links), Internet Identity admin login, custom domain, and app store publishing with first-login admin bootstrap.",
+  "features": [
+    "Admin login via Internet Identity with first-login bootstrap for clones",
+    "About section with info screens, rich text editor, image/video upload, heading alignment, and reorderable screens",
+    "Blog with emoji picker and formatted posts",
+    "Links section with drag-and-drop reorder",
+    "Site statistics showing visit count and backend canister ID",
+    "Editable section names, page heading with font/color/background settings",
+    "Dark/light mode toggle",
+    "Custom domain support (www.plsak.com)"
+  ],
+  "category": "personal",
+  "tags": [
+    "personal-website",
+    "blog",
+    "internet-computer",
+    "icp",
+    "admin",
+    "links",
+    "about"
+  ],
+  "last_updated": "2026-05-16T10:40:56.769Z"
+}

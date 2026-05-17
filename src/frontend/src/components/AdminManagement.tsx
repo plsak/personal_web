@@ -1,10 +1,9 @@
 import { Principal } from "@dfinity/principal";
 import {
+  BarChart2,
   Check,
   Copy,
-  Eye,
   Plus,
-  Server,
   Settings,
   Shield,
   Trash2,
@@ -12,12 +11,13 @@ import {
   X,
 } from "lucide-react";
 import type React from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { UserRole } from "../backend";
 import {
   useAssignUserRole,
   useGetAllAdminPrincipals,
-  useGetVisitCount,
+  useGetCaffeineInfoConfig,
+  useGetSiteStatistics,
 } from "../hooks/useQueries";
 
 export default function AdminManagement() {
@@ -25,12 +25,11 @@ export default function AdminManagement() {
   const [newAdminPrincipal, setNewAdminPrincipal] = useState("");
   const [error, setError] = useState("");
   const [copiedItems, setCopiedItems] = useState<Set<string>>(new Set());
-
   const assignUserRole = useAssignUserRole();
   const { data: adminPrincipals = [], isLoading: loadingAdmins } =
     useGetAllAdminPrincipals();
-  const { data: visitCount = 0n, isLoading: loadingVisitCount } =
-    useGetVisitCount();
+  const { data: stats, isLoading: loadingStats } = useGetSiteStatistics();
+  const { data: infoConfig } = useGetCaffeineInfoConfig();
 
   const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,6 +71,11 @@ export default function AdminManagement() {
     return `${principal.slice(0, 4)}...${principal.slice(-4)}`;
   };
 
+  const formatCanisterId = (id: string) => {
+    if (!id || id.length <= 8) return id;
+    return `${id.slice(0, 5)}...${id.slice(-3)}`;
+  };
+
   const copyToClipboard = async (text: string, itemId: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -87,12 +91,6 @@ export default function AdminManagement() {
       console.error("Failed to copy to clipboard:", err);
     }
   };
-
-  // All canister IDs used by the app
-  const canisterIds = [
-    { id: "tks3f-kaaaa-aaaas-qbq5q-cai", label: "Backend Canister" },
-    { id: "tkq3f-kaaaa-aaaas-qbq5q-cai", label: "Frontend Canister" },
-  ];
 
   return (
     <>
@@ -125,77 +123,84 @@ export default function AdminManagement() {
               </button>
             </div>
 
-            {/* Site Statistics Section - Now First */}
+            {/* Site Statistics Section */}
             <div className="mb-6 p-4 bg-slate-700 rounded-lg border border-slate-600">
-              <div className="flex items-center gap-2 mb-2">
-                <Eye className="w-5 h-5 text-green-400" />
+              <div className="flex items-center gap-2 mb-3">
+                <BarChart2 className="w-5 h-5 text-green-400" />
                 <h3 className="text-lg font-medium text-slate-100">
                   Site Statistics
                 </h3>
               </div>
-              <div className="text-slate-300">
-                <span className="font-medium">Visited:</span>{" "}
-                {loadingVisitCount ? (
-                  <span className="text-slate-400">Loading...</span>
-                ) : (
-                  <span className="text-green-400 font-mono">
-                    {visitCount.toString()}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Canister Information Section */}
-            <div className="mb-6 p-4 bg-slate-700 rounded-lg border border-slate-600">
-              <div className="flex items-center gap-2 mb-3">
-                <Server className="w-5 h-5 text-cyan-400" />
-                <h3 className="text-lg font-medium text-slate-100">
-                  Canister Information
-                </h3>
-              </div>
-              <div className="space-y-3">
-                {canisterIds.map((canister) => {
-                  const itemId = `canister-${canister.id}`;
-                  const isCopied = copiedItems.has(itemId);
-
-                  return (
-                    <div
-                      key={canister.id}
-                      className="flex items-center justify-between bg-slate-600 rounded p-3"
-                    >
-                      <div className="flex-1">
-                        <div className="text-slate-300 text-sm mb-1">
-                          {canister.label}:
-                        </div>
-                        <div className="text-slate-100 font-mono text-sm">
-                          {formatPrincipal(canister.id)}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 ml-2">
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(canister.id, itemId)}
-                            className="text-slate-400 hover:text-slate-200 transition-colors p-1"
-                            title={`Copy full ${canister.label.toLowerCase()} ID`}
-                          >
-                            {isCopied ? (
-                              <Check className="w-4 h-4 text-slate-300" />
-                            ) : (
-                              <Copy className="w-4 h-4" />
-                            )}
-                          </button>
-                          {isCopied && (
-                            <div className="absolute -top-8 right-0 bg-slate-600 text-slate-200 text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap">
-                              Copied!
-                            </div>
+              {loadingStats ? (
+                <div className="text-slate-400 text-sm">Loading...</div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="text-slate-300">
+                    <span className="font-medium">Visited:</span>{" "}
+                    <span className="text-green-400 font-mono">
+                      {stats?.visitCount?.toString() ?? "0"}
+                    </span>
+                  </div>
+                  <div className="text-slate-300">
+                    <span className="font-medium">Links:</span>{" "}
+                    <span className="text-blue-400 font-mono">
+                      {stats?.linksCount?.toString() ?? "0"}
+                    </span>
+                  </div>
+                  <div className="text-slate-300">
+                    <span className="font-medium">Blog Posts:</span>{" "}
+                    <span className="text-purple-400 font-mono">
+                      {stats?.blogPostsCount?.toString() ?? "0"}
+                    </span>
+                  </div>
+                  <div className="text-slate-300">
+                    <span className="font-medium">Information Screens:</span>{" "}
+                    <span className="text-yellow-400 font-mono">
+                      {(
+                        infoConfig?.screens?.length ??
+                        stats?.infoScreensCount ??
+                        0
+                      ).toString()}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-300">
+                    <span className="font-medium">Backend Canister:</span>{" "}
+                    {stats?.backendCanisterId ? (
+                      <span className="text-cyan-400 font-mono">
+                        {formatCanisterId(stats.backendCanisterId)}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">n/a</span>
+                    )}
+                    {stats?.backendCanisterId && (
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            copyToClipboard(
+                              stats.backendCanisterId,
+                              "backend-canister-id",
+                            )
+                          }
+                          className="text-slate-400 hover:text-slate-200 transition-colors p-0.5"
+                          title="Copy full backend canister ID"
+                        >
+                          {copiedItems.has("backend-canister-id") ? (
+                            <Check className="w-3.5 h-3.5 text-slate-300" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
                           )}
-                        </div>
+                        </button>
+                        {copiedItems.has("backend-canister-id") && (
+                          <div className="absolute -top-8 right-0 bg-slate-600 text-slate-200 text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap">
+                            Copied!
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Current Admin List */}
@@ -292,6 +297,13 @@ export default function AdminManagement() {
               </div>
               {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
             </form>
+
+            {/* App Version */}
+            <div className="mt-6 pt-4 border-t border-slate-700 text-center">
+              <span className="text-sm text-slate-400 font-medium">
+                App Version: 0.4.169
+              </span>
+            </div>
           </div>
         </div>
       )}

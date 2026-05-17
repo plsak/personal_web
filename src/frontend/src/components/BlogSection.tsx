@@ -1,4 +1,5 @@
-import { Calendar, Edit2, Plus, Save, Smile, Trash2, X } from "lucide-react";
+import { stripInlineTextAlign } from "@/utils/htmlUtils";
+import { Calendar, Edit2, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
 import type { BlogPost } from "../backend";
@@ -7,14 +8,20 @@ import {
   useDeleteBlogPost,
   useEditBlogPost,
   useGetAllBlogPosts,
+  useGetSectionNames,
+  useSetSectionName,
 } from "../hooks/useQueries";
-import EmojiPicker from "./EmojiPicker";
+import UnifiedTextEditor from "./UnifiedTextEditor";
 
 interface BlogSectionProps {
   isAdmin: boolean;
+  cardBgStyle?: React.CSSProperties;
 }
 
-export default function BlogSection({ isAdmin }: BlogSectionProps) {
+export default function BlogSection({
+  isAdmin,
+  cardBgStyle,
+}: BlogSectionProps) {
   const { data: blogPosts = [], isLoading } = useGetAllBlogPosts();
   const addBlogPost = useAddBlogPost();
   const editBlogPost = useEditBlogPost();
@@ -25,26 +32,19 @@ export default function BlogSection({ isAdmin }: BlogSectionProps) {
   const [newPost, setNewPost] = useState({ title: "", content: "" });
   const [editPost, setEditPost] = useState({ title: "", content: "" });
 
-  // Emoji picker states
-  const [showTitleEmojiPicker, setShowTitleEmojiPicker] = useState(false);
-  const [showContentEmojiPicker, setShowContentEmojiPicker] = useState(false);
-  const [showEditTitleEmojiPicker, setShowEditTitleEmojiPicker] =
-    useState(false);
-  const [showEditContentEmojiPicker, setShowEditContentEmojiPicker] =
-    useState(false);
-
   const handleAddPost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPost.title.trim() && newPost.content.trim()) {
+    // Strip HTML to check for actual content
+    const titleText = newPost.title.replace(/<[^>]*>/g, "").trim();
+    const contentText = newPost.content.replace(/<[^>]*>/g, "").trim();
+    if (titleText && contentText) {
       try {
         await addBlogPost.mutateAsync({
-          title: newPost.title.trim(),
-          content: newPost.content.trim(),
+          title: newPost.title,
+          content: newPost.content,
         });
         setNewPost({ title: "", content: "" });
         setIsAdding(false);
-        setShowTitleEmojiPicker(false);
-        setShowContentEmojiPicker(false);
       } catch (error) {
         console.error("Failed to add blog post:", error);
       }
@@ -53,22 +53,17 @@ export default function BlogSection({ isAdmin }: BlogSectionProps) {
 
   const handleEditPost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (
-      editingId !== null &&
-      editPost.title.trim() &&
-      editPost.content.trim()
-    ) {
+    const titleText = editPost.title.replace(/<[^>]*>/g, "").trim();
+    const contentText = editPost.content.replace(/<[^>]*>/g, "").trim();
+    if (editingId !== null && titleText && contentText) {
       try {
         await editBlogPost.mutateAsync({
           id: editingId,
-          title: editPost.title.trim(),
-          content: editPost.content.trim(),
+          title: editPost.title,
+          content: editPost.content,
         });
-        // Reset editing state after successful save
         setEditingId(null);
         setEditPost({ title: "", content: "" });
-        setShowEditTitleEmojiPicker(false);
-        setShowEditContentEmojiPicker(false);
       } catch (error) {
         console.error("Failed to edit blog post:", error);
         // Don't reset state on error so user can retry
@@ -79,23 +74,16 @@ export default function BlogSection({ isAdmin }: BlogSectionProps) {
   const startEdit = (post: BlogPost) => {
     setEditingId(post.id);
     setEditPost({ title: post.title, content: post.content });
-    // Close any open emoji pickers
-    setShowEditTitleEmojiPicker(false);
-    setShowEditContentEmojiPicker(false);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setEditPost({ title: "", content: "" });
-    setShowEditTitleEmojiPicker(false);
-    setShowEditContentEmojiPicker(false);
   };
 
   const cancelAdd = () => {
     setIsAdding(false);
     setNewPost({ title: "", content: "" });
-    setShowTitleEmojiPicker(false);
-    setShowContentEmojiPicker(false);
   };
 
   const handleDelete = async (id: bigint) => {
@@ -121,38 +109,102 @@ export default function BlogSection({ isAdmin }: BlogSectionProps) {
     });
   };
 
-  // Emoji insertion handlers for new post
-  const handleTitleEmojiSelect = (emoji: string) => {
-    setNewPost((prev) => ({ ...prev, title: prev.title + emoji }));
-    setShowTitleEmojiPicker(false);
-  };
-
-  const handleContentEmojiSelect = (emoji: string) => {
-    setNewPost((prev) => ({ ...prev, content: prev.content + emoji }));
-    setShowContentEmojiPicker(false);
-  };
-
-  // Emoji insertion handlers for edit post
-  const handleEditTitleEmojiSelect = (emoji: string) => {
-    setEditPost((prev) => ({ ...prev, title: prev.title + emoji }));
-    setShowEditTitleEmojiPicker(false);
-  };
-
-  const handleEditContentEmojiSelect = (emoji: string) => {
-    setEditPost((prev) => ({ ...prev, content: prev.content + emoji }));
-    setShowEditContentEmojiPicker(false);
-  };
-
   // Sort posts by timestamp (newest first)
   const sortedPosts = [...blogPosts].sort((a, b) =>
     Number(b.timestamp - a.timestamp),
   );
 
+  const { data: sectionNames } = useGetSectionNames();
+  const setSectionName = useSetSectionName();
+  const [editingBlogName, setEditingBlogName] = useState(false);
+  const [pendingBlogName, setPendingBlogName] = useState("");
+
+  const displayBlogName = sectionNames?.blog ?? "Blog";
+
+  const handleBlogNameClick = () => {
+    if (!isAdmin) return;
+    setPendingBlogName(displayBlogName);
+    setEditingBlogName(true);
+  };
+
+  const saveBlogName = async () => {
+    const stripped = pendingBlogName.replace(/<[^>]*>/g, "").trim();
+    if (stripped) {
+      try {
+        await setSectionName.mutateAsync({
+          section: "blog",
+          name: pendingBlogName,
+        });
+      } catch (e) {
+        console.error("Failed to save blog name:", e);
+      }
+    }
+    setEditingBlogName(false);
+  };
+
+  const cancelBlogName = () => {
+    setEditingBlogName(false);
+    setPendingBlogName("");
+  };
+
   return (
-    <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+    <div
+      className="bg-slate-800 rounded-lg p-6 border border-slate-700"
+      style={cardBgStyle}
+    >
       <div className="flex items-center justify-between mb-6">
         <div className="flex-1 flex justify-center">
-          <h2 className="text-xl font-semibold text-slate-100">Blog</h2>
+          {editingBlogName ? (
+            <div className="flex flex-col items-center gap-2 w-full max-w-xs">
+              <UnifiedTextEditor
+                value={pendingBlogName}
+                onChange={setPendingBlogName}
+                placeholder="Section name"
+                showFontPicker
+                showColorPicker
+                minRows={1}
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={saveBlogName}
+                  className="flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs transition-colors"
+                >
+                  <Save className="w-3 h-3" /> Save
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelBlogName}
+                  className="flex items-center gap-1 bg-slate-600 hover:bg-slate-500 text-white px-2 py-1 rounded text-xs transition-colors"
+                >
+                  <X className="w-3 h-3" /> Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <h2
+                className={`text-xl font-semibold text-slate-100 rich-text-content ${isAdmin ? "cursor-pointer hover:text-blue-300 transition-colors" : ""}`}
+                onClick={handleBlogNameClick}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") handleBlogNameClick();
+                }}
+                role={isAdmin ? "button" : undefined}
+                tabIndex={isAdmin ? 0 : undefined}
+                title={isAdmin ? "Click to rename" : undefined}
+                // biome-ignore lint/security/noDangerouslySetInnerHtml: admin-controlled section name
+                dangerouslySetInnerHTML={{
+                  __html: stripInlineTextAlign(displayBlogName),
+                }}
+              />
+              {isAdmin && (
+                <Pencil
+                  className="w-3 h-3 text-slate-500 hover:text-blue-400 cursor-pointer transition-colors"
+                  onClick={handleBlogNameClick}
+                />
+              )}
+            </div>
+          )}
         </div>
         {isAdmin && (
           <button
@@ -170,86 +222,33 @@ export default function BlogSection({ isAdmin }: BlogSectionProps) {
       {isAdmin && isAdding && (
         <form
           onSubmit={handleAddPost}
-          className="mb-6 p-4 bg-slate-700 rounded-lg border border-slate-600"
+          className="mb-6 p-4 bg-slate-700 rounded-lg border border-slate-600 space-y-3"
         >
-          <div className="mb-3">
-            <div className="relative">
-              <input
-                type="text"
-                value={newPost.title}
-                onChange={(e) =>
-                  setNewPost({ ...newPost, title: e.target.value })
-                }
-                placeholder="Post title"
-                className="blog-input w-full px-3 py-2 pr-10 bg-slate-600 border border-slate-500 rounded text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 emoji-support"
-                required
-                style={{
-                  fontFamily: "Inter, sans-serif",
-                  fontSize: "1rem",
-                  fontWeight: "400",
-                  letterSpacing: "0",
-                  wordSpacing: "0",
-                  lineHeight: "1.5",
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowTitleEmojiPicker(!showTitleEmojiPicker)}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors"
-                title="Add emoji"
-              >
-                <Smile className="w-5 h-5" />
-              </button>
-              {showTitleEmojiPicker && (
-                <div className="absolute top-full right-0 mt-1 z-50">
-                  <EmojiPicker
-                    onEmojiSelect={handleTitleEmojiSelect}
-                    onClose={() => setShowTitleEmojiPicker(false)}
-                  />
-                </div>
-              )}
-            </div>
+          <div>
+            <span className="block text-xs font-medium text-slate-400 mb-1">
+              Post Title
+            </span>
+            <UnifiedTextEditor
+              value={newPost.title}
+              onChange={(val) => setNewPost((p) => ({ ...p, title: val }))}
+              placeholder="Post title"
+              showFontPicker
+              showColorPicker
+              minRows={1}
+            />
           </div>
-          <div className="mb-3">
-            <div className="relative">
-              <textarea
-                value={newPost.content}
-                onChange={(e) =>
-                  setNewPost({ ...newPost, content: e.target.value })
-                }
-                placeholder="Post content"
-                rows={4}
-                className="blog-textarea w-full px-3 py-2 pr-10 bg-slate-600 border border-slate-500 rounded text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none emoji-support"
-                required
-                style={{
-                  fontFamily: "Inter, sans-serif",
-                  fontSize: "1rem",
-                  fontWeight: "400",
-                  letterSpacing: "0",
-                  wordSpacing: "0",
-                  lineHeight: "1.6",
-                  whiteSpace: "pre-wrap",
-                }}
-              />
-              <button
-                type="button"
-                onClick={() =>
-                  setShowContentEmojiPicker(!showContentEmojiPicker)
-                }
-                className="absolute right-2 top-2 text-slate-400 hover:text-slate-200 transition-colors"
-                title="Add emoji"
-              >
-                <Smile className="w-5 h-5" />
-              </button>
-              {showContentEmojiPicker && (
-                <div className="absolute top-full right-0 mt-1 z-50">
-                  <EmojiPicker
-                    onEmojiSelect={handleContentEmojiSelect}
-                    onClose={() => setShowContentEmojiPicker(false)}
-                  />
-                </div>
-              )}
-            </div>
+          <div>
+            <span className="block text-xs font-medium text-slate-400 mb-1">
+              Post Content
+            </span>
+            <UnifiedTextEditor
+              value={newPost.content}
+              onChange={(val) => setNewPost((p) => ({ ...p, content: val }))}
+              placeholder="Post content"
+              showFontPicker
+              showColorPicker
+              minRows={4}
+            />
           </div>
           <div className="flex gap-2">
             <button
@@ -290,84 +289,35 @@ export default function BlogSection({ isAdmin }: BlogSectionProps) {
             >
               {editingId === post.id ? (
                 <form onSubmit={handleEditPost} className="space-y-3">
-                  <div className="relative">
-                    <input
-                      type="text"
+                  <div>
+                    <span className="block text-xs font-medium text-slate-400 mb-1">
+                      Post Title
+                    </span>
+                    <UnifiedTextEditor
                       value={editPost.title}
-                      onChange={(e) =>
-                        setEditPost({ ...editPost, title: e.target.value })
+                      onChange={(val) =>
+                        setEditPost((p) => ({ ...p, title: val }))
                       }
-                      className="blog-input w-full px-3 py-2 pr-10 bg-slate-600 border border-slate-500 rounded text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 emoji-support"
-                      required
                       placeholder="Post title"
-                      style={{
-                        fontFamily: "Inter, sans-serif",
-                        fontSize: "1rem",
-                        fontWeight: "400",
-                        letterSpacing: "0",
-                        wordSpacing: "0",
-                        lineHeight: "1.5",
-                      }}
+                      showFontPicker
+                      showColorPicker
+                      minRows={1}
                     />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowEditTitleEmojiPicker(!showEditTitleEmojiPicker)
-                      }
-                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors"
-                      title="Add emoji"
-                    >
-                      <Smile className="w-5 h-5" />
-                    </button>
-                    {showEditTitleEmojiPicker && (
-                      <div className="absolute top-full right-0 mt-1 z-50">
-                        <EmojiPicker
-                          onEmojiSelect={handleEditTitleEmojiSelect}
-                          onClose={() => setShowEditTitleEmojiPicker(false)}
-                        />
-                      </div>
-                    )}
                   </div>
-                  <div className="relative">
-                    <textarea
+                  <div>
+                    <span className="block text-xs font-medium text-slate-400 mb-1">
+                      Post Content
+                    </span>
+                    <UnifiedTextEditor
                       value={editPost.content}
-                      onChange={(e) =>
-                        setEditPost({ ...editPost, content: e.target.value })
+                      onChange={(val) =>
+                        setEditPost((p) => ({ ...p, content: val }))
                       }
-                      rows={4}
-                      className="blog-textarea w-full px-3 py-2 pr-10 bg-slate-600 border border-slate-500 rounded text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none emoji-support"
-                      required
                       placeholder="Post content"
-                      style={{
-                        fontFamily: "Inter, sans-serif",
-                        fontSize: "1rem",
-                        fontWeight: "400",
-                        letterSpacing: "0",
-                        wordSpacing: "0",
-                        lineHeight: "1.6",
-                        whiteSpace: "pre-wrap",
-                      }}
+                      showFontPicker
+                      showColorPicker
+                      minRows={4}
                     />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowEditContentEmojiPicker(
-                          !showEditContentEmojiPicker,
-                        )
-                      }
-                      className="absolute right-2 top-2 text-slate-400 hover:text-slate-200 transition-colors"
-                      title="Add emoji"
-                    >
-                      <Smile className="w-5 h-5" />
-                    </button>
-                    {showEditContentEmojiPicker && (
-                      <div className="absolute top-full right-0 mt-1 z-50">
-                        <EmojiPicker
-                          onEmojiSelect={handleEditContentEmojiSelect}
-                          onClose={() => setShowEditContentEmojiPicker(false)}
-                        />
-                      </div>
-                    )}
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -392,20 +342,14 @@ export default function BlogSection({ isAdmin }: BlogSectionProps) {
                 <>
                   <div className="flex items-start justify-between mb-2">
                     <h3
-                      className="blog-title text-lg font-medium text-slate-100 emoji-support"
-                      style={{
-                        fontFamily: "Inter, sans-serif",
-                        fontSize: "1.125rem",
-                        fontWeight: "500",
-                        letterSpacing: "0",
-                        wordSpacing: "0",
-                        lineHeight: "1.4",
+                      className="blog-title text-lg font-medium text-slate-100 emoji-support rich-text-content"
+                      // biome-ignore lint/security/noDangerouslySetInnerHtml: blog title is admin-controlled rich text
+                      dangerouslySetInnerHTML={{
+                        __html: stripInlineTextAlign(post.title),
                       }}
-                    >
-                      {post.title}
-                    </h3>
+                    />
                     {isAdmin && (
-                      <div className="flex gap-1">
+                      <div className="flex gap-1 ml-2 shrink-0">
                         <button
                           type="button"
                           onClick={() => startEdit(post)}
@@ -426,19 +370,12 @@ export default function BlogSection({ isAdmin }: BlogSectionProps) {
                     )}
                   </div>
                   <div
-                    className="blog-content text-slate-300 mb-3 emoji-support"
-                    style={{
-                      fontFamily: "Inter, sans-serif",
-                      fontSize: "0.875rem",
-                      fontWeight: "400",
-                      letterSpacing: "0",
-                      wordSpacing: "0",
-                      lineHeight: "1.6",
-                      whiteSpace: "pre-wrap",
+                    className="blog-content text-slate-300 mb-3 emoji-support rich-text-content"
+                    // biome-ignore lint/security/noDangerouslySetInnerHtml: blog content is admin-controlled rich text
+                    dangerouslySetInnerHTML={{
+                      __html: stripInlineTextAlign(post.content),
                     }}
-                  >
-                    {post.content}
-                  </div>
+                  />
                   <div className="flex items-center gap-4 text-sm text-slate-400">
                     <div className="flex items-center gap-1">
                       <Calendar className="w-4 h-4" />

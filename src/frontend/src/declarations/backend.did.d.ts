@@ -10,6 +10,16 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface BackgroundConfig {
+  'blogCardImageUrl' : [] | [string],
+  'linksCardImageUrl' : [] | [string],
+  'aboutCardColor' : [] | [string],
+  'linksCardColor' : [] | [string],
+  'aboutCardImageUrl' : [] | [string],
+  'pageBackgroundImageUrl' : [] | [string],
+  'pageBackgroundColor' : [] | [string],
+  'blogCardColor' : [] | [string],
+}
 export interface BlogPost {
   'id' : bigint,
   'title' : string,
@@ -23,11 +33,21 @@ export interface CaffeineInfoScreenRecord {
   'title' : string,
   'content' : string,
   'order' : bigint,
+  'mediaUrl' : [] | [string],
 }
 export interface HeadingConfig {
+  'backgroundColor' : [] | [string],
+  'backgroundImageUrl' : [] | [string],
   'font' : string,
   'color' : string,
   'text' : string,
+}
+export interface SiteStatistics {
+  'visitCount' : bigint,
+  'blogPostsCount' : bigint,
+  'linksCount' : bigint,
+  'backendCanisterId' : string,
+  'infoScreensCount' : bigint,
 }
 export type Time = bigint;
 export interface UserProfile { 'name' : string }
@@ -51,6 +71,8 @@ export interface _SERVICE {
   'getAllAdminPrincipals' : ActorMethod<[], Array<Principal>>,
   'getAllBlogPosts' : ActorMethod<[], Array<BlogPost>>,
   'getAllWebLinks' : ActorMethod<[], Array<WebLink>>,
+  'getBackendCanisterId' : ActorMethod<[], string>,
+  'getBackgroundConfig' : ActorMethod<[], BackgroundConfig>,
   'getCaffeineInfo' : ActorMethod<[], [] | [CaffeineInfo]>,
   'getCaffeineInfoConfig' : ActorMethod<
     [],
@@ -58,21 +80,44 @@ export interface _SERVICE {
   >,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
+  'getFrontendCanisterId' : ActorMethod<[], string>,
   'getHeadingConfig' : ActorMethod<[], HeadingConfig>,
   'getOrderedWebLinks' : ActorMethod<[], Array<WebLink>>,
+  'getSectionNames' : ActorMethod<
+    [],
+    { 'about' : string, 'blog' : string, 'links' : string }
+  >,
+  'getSectionOrder' : ActorMethod<[], Array<string>>,
+  'getSectionVisibility' : ActorMethod<
+    [],
+    { 'about' : boolean, 'blog' : boolean, 'links' : boolean }
+  >,
+  'getSiteStatistics' : ActorMethod<[], SiteStatistics>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getVisitCount' : ActorMethod<[], bigint>,
   'incrementVisitCount' : ActorMethod<[], undefined>,
   'initializeAccessControl' : ActorMethod<[], undefined>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'reorderCaffeineInfoScreens' : ActorMethod<[Array<string>], undefined>,
   'reorderWebLinks' : ActorMethod<[Array<bigint>], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'setFrontendCanisterId' : ActorMethod<[string], undefined>,
+  'setSectionName' : ActorMethod<[string, string], undefined>,
+  'setSectionOrder' : ActorMethod<[Array<string>], undefined>,
+  'setSectionVisibility' : ActorMethod<
+    [{ 'about' : boolean, 'blog' : boolean, 'links' : boolean }],
+    undefined
+  >,
+  'updateBackgroundConfig' : ActorMethod<[BackgroundConfig], undefined>,
   'updateCaffeineInfo' : ActorMethod<[string], undefined>,
   'updateCaffeineInfoConfig' : ActorMethod<
     [string, Array<CaffeineInfoScreenRecord>],
     undefined
   >,
-  'updateHeadingConfig' : ActorMethod<[string, string, string], undefined>,
+  'updateHeadingConfig' : ActorMethod<
+    [string, string, string, [] | [string], [] | [string]],
+    undefined
+  >,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

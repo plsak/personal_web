@@ -1,6 +1,17 @@
 import { useActor, useInternetIdentity } from "@caffeineai/core-infrastructure";
-import { AlertTriangle, Check, Copy, Heart } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  Check,
+  Copy,
+  Eye,
+  EyeOff,
+  GripVertical,
+  Heart,
+  Save,
+  X,
+} from "lucide-react";
+import type React from "react";
+import { useEffect, useRef, useState } from "react";
 import { createActor } from "./backend";
 import AdminManagement from "./components/AdminManagement";
 import BlogSection from "./components/BlogSection";
@@ -9,9 +20,15 @@ import HeadingEditor from "./components/HeadingEditor";
 import LinksSection from "./components/LinksSection";
 import LoginButton from "./components/LoginButton";
 import {
+  useGetBackgroundConfig,
   useGetHeadingConfig,
+  useGetSectionNames,
+  useGetSectionOrder,
+  useGetSectionVisibility,
   useIncrementVisitCount,
   useIsCallerAdmin,
+  useSetSectionOrder,
+  useSetSectionVisibility,
 } from "./hooks/useQueries";
 
 export default function App() {
@@ -19,11 +36,30 @@ export default function App() {
   const { actor } = useActor(createActor);
   const { data: isAdmin = false, refetch: refetchAdmin } = useIsCallerAdmin();
   const { data: headingConfig } = useGetHeadingConfig();
+  const { data: backgroundConfig } = useGetBackgroundConfig();
+  const { data: sectionOrder = ["about", "links", "blog"] } =
+    useGetSectionOrder();
+  const { data: sectionVisibility = { about: true, links: true, blog: true } } =
+    useGetSectionVisibility();
+  const {
+    data: sectionNames = { about: "About", links: "Links", blog: "Blog" },
+  } = useGetSectionNames();
+  const setSectionOrder = useSetSectionOrder();
+  const setSectionVisibility = useSetSectionVisibility();
   const incrementVisitCount = useIncrementVisitCount();
   const hasIncrementedRef = useRef(false);
   const hasBootstrappedRef = useRef(false);
 
   const [showCopiedFeedback, setShowCopiedFeedback] = useState(false);
+  const [sectionReorderMode, setSectionReorderMode] = useState(false);
+  const [tempOrder, setTempOrder] = useState<string[]>([]);
+  const [tempVisibility, setTempVisibility] = useState<{
+    about: boolean;
+    links: boolean;
+    blog: boolean;
+  }>({ about: true, links: true, blog: true });
+  const [draggedSection, setDraggedSection] = useState<string | null>(null);
+  const [dragOverSection, setDragOverSection] = useState<string | null>(null);
 
   const isAuthenticated = !!identity;
 
@@ -33,16 +69,13 @@ export default function App() {
   useEffect(() => {
     if (identity && actor && !hasBootstrappedRef.current) {
       hasBootstrappedRef.current = true;
-      (async () => {
-        try {
-          await actor.initializeAccessControl();
-        } catch (err: unknown) {
+      actor
+        .initializeAccessControl()
+        .then(() => refetchAdmin())
+        .catch((err: unknown) => {
           console.warn("initializeAccessControl (non-fatal):", err);
-        }
-        // Always refetch after bootstrap attempt so admin state is fresh
-        // before the Access Denied banner can render
-        await refetchAdmin();
-      })();
+          refetchAdmin();
+        });
     }
     if (!identity) {
       hasBootstrappedRef.current = false;
@@ -68,30 +101,6 @@ export default function App() {
     }
   }, [incrementVisitCount]);
 
-  // Also increment on page visibility change (when user returns to tab)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        const lastVisit = localStorage.getItem("last_visit_time");
-        const currentTime = Date.now();
-        const fiveMinutes = 5 * 60 * 1000; // 5 minutes in milliseconds
-
-        // If it's been more than 5 minutes since last visit, count as new visit
-        if (
-          !lastVisit ||
-          currentTime - Number.parseInt(lastVisit) > fiveMinutes
-        ) {
-          localStorage.setItem("last_visit_time", currentTime.toString());
-          incrementVisitCount.mutate();
-        }
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () =>
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [incrementVisitCount]);
-
   // Helper function to format principal
   const formatPrincipal = (principal: string) => {
     if (principal.length <= 8) return principal;
@@ -113,7 +122,7 @@ export default function App() {
 
   // Get heading configuration with defaults
   const getHeadingText = () => {
-    return headingConfig?.text || "plsak with caffeine.ai";
+    return headingConfig?.text || "";
   };
 
   const getHeadingFont = () => {
@@ -122,6 +131,50 @@ export default function App() {
 
   const getHeadingColor = () => {
     return headingConfig?.color || "#f1f5f9"; // slate-100
+  };
+
+  const getHeaderBgStyle = (): React.CSSProperties => {
+    const imgUrl = headingConfig?.backgroundImageUrl;
+    const bgCol = headingConfig?.backgroundColor;
+    if (imgUrl) {
+      return {
+        backgroundImage: `url(${imgUrl})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      };
+    }
+    if (bgCol) return { backgroundColor: bgCol };
+    return {};
+  };
+
+  const getPageBgStyle = (): React.CSSProperties => {
+    const imgUrl = backgroundConfig?.pageBackgroundImageUrl;
+    const bgCol = backgroundConfig?.pageBackgroundColor;
+    if (imgUrl) {
+      return {
+        backgroundImage: `url(${imgUrl})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
+      };
+    }
+    if (bgCol) return { backgroundColor: bgCol };
+    return {};
+  };
+
+  const getCardBgStyle = (
+    imageUrl?: string,
+    color?: string,
+  ): React.CSSProperties => {
+    if (imageUrl) {
+      return {
+        backgroundImage: `url(${imageUrl})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      };
+    }
+    if (color) return { backgroundColor: color };
+    return {};
   };
 
   const getHeadingFontClass = () => {
@@ -142,6 +195,71 @@ export default function App() {
     }
   };
 
+  // Section reorder helpers
+  const enterReorderMode = () => {
+    setTempOrder([...sectionOrder]);
+    setTempVisibility({ ...sectionVisibility });
+    setSectionReorderMode(true);
+  };
+
+  const cancelReorderMode = () => {
+    setSectionReorderMode(false);
+    setDraggedSection(null);
+    setDragOverSection(null);
+  };
+
+  const saveReorderMode = async () => {
+    await setSectionOrder.mutateAsync(tempOrder);
+    await setSectionVisibility.mutateAsync(tempVisibility);
+    setSectionReorderMode(false);
+    setDraggedSection(null);
+    setDragOverSection(null);
+  };
+
+  const handleDragStart = (section: string) => {
+    setDraggedSection(section);
+  };
+
+  const handleDragOver = (e: React.DragEvent, section: string) => {
+    e.preventDefault();
+    if (draggedSection && draggedSection !== section) {
+      setDragOverSection(section);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetSection: string) => {
+    e.preventDefault();
+    if (!draggedSection || draggedSection === targetSection) return;
+    const newOrder = [...tempOrder];
+    const fromIdx = newOrder.indexOf(draggedSection);
+    const toIdx = newOrder.indexOf(targetSection);
+    if (fromIdx === -1 || toIdx === -1) return;
+    newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, draggedSection);
+    setTempOrder(newOrder);
+    setDraggedSection(null);
+    setDragOverSection(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedSection(null);
+    setDragOverSection(null);
+  };
+
+  const toggleSectionVisibility = (section: string) => {
+    setTempVisibility((prev) => ({
+      ...prev,
+      [section]: !prev[section as keyof typeof prev],
+    }));
+  };
+
+  const getSectionDisplayName = (key: string) => {
+    if (key === "about") return sectionNames.about || "About";
+    if (key === "links") return sectionNames.links || "Links";
+    if (key === "blog") return sectionNames.blog || "Blog";
+    return key;
+  };
+
   if (isInitializing) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -151,22 +269,28 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100">
+    <div
+      className="min-h-screen bg-slate-900 text-slate-100"
+      style={getPageBgStyle()}
+    >
       {/* Header */}
-      <header className="bg-slate-800 border-b border-slate-700">
+      <header
+        className="bg-slate-800 border-b border-slate-700"
+        style={getHeaderBgStyle()}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex-1 flex justify-center">
               <div className="text-center">
-                <div className="relative group">
+                <div className="relative">
                   <h1
                     className={`text-4xl font-bold ${getHeadingFontClass()}`}
                     style={{ color: getHeadingColor() }}
-                  >
-                    {getHeadingText()}
-                  </h1>
+                    // biome-ignore lint/security/noDangerouslySetInnerHtml: heading is admin-controlled rich text
+                    dangerouslySetInnerHTML={{ __html: getHeadingText() }}
+                  />
                   {isAdmin && (
-                    <div className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute -top-10 right-0">
                       <HeadingEditor />
                     </div>
                   )}
@@ -226,25 +350,249 @@ export default function App() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column - Caffeine Info (Top) and Links (Bottom) */}
-          <div className="lg:col-span-2 space-y-8">
-            <CaffeineInfoSection isAdmin={isAdmin} />
-            <LinksSection isAdmin={isAdmin} />
+        {/* Section Reorder Mode */}
+        {isAdmin && sectionReorderMode && (
+          <div className="mb-6 p-4 bg-slate-800 rounded-lg border border-slate-600">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium text-slate-200">
+                Drag to reorder sections. Toggle eye to show/hide.
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={saveReorderMode}
+                  disabled={
+                    setSectionOrder.isPending || setSectionVisibility.isPending
+                  }
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs bg-green-700 hover:bg-green-600 text-white transition-colors disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {setSectionOrder.isPending || setSectionVisibility.isPending
+                    ? "Saving..."
+                    : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelReorderMode}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs bg-slate-600 hover:bg-slate-500 text-slate-200 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Cancel
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {tempOrder.map((sectionKey) => {
+                const isVisible =
+                  tempVisibility[sectionKey as keyof typeof tempVisibility];
+                const isDragging = draggedSection === sectionKey;
+                const isDragOver = dragOverSection === sectionKey;
+                return (
+                  <div
+                    key={sectionKey}
+                    draggable
+                    onDragStart={() => handleDragStart(sectionKey)}
+                    onDragOver={(e) => handleDragOver(e, sectionKey)}
+                    onDrop={(e) => handleDrop(e, sectionKey)}
+                    onDragEnd={handleDragEnd}
+                    className={`flex items-center gap-3 p-3 rounded border cursor-grab active:cursor-grabbing transition-all ${
+                      isDragging
+                        ? "opacity-40 border-slate-500 bg-slate-700"
+                        : isDragOver
+                          ? "border-blue-500 bg-slate-700 scale-[1.01]"
+                          : "border-slate-600 bg-slate-700 hover:border-slate-500"
+                    }`}
+                  >
+                    <GripVertical className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                    <span
+                      className={`flex-1 text-sm font-medium ${isVisible ? "text-slate-100" : "text-slate-500 line-through"}`}
+                    >
+                      {getSectionDisplayName(sectionKey)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleSectionVisibility(sectionKey)}
+                      className={`p-1 rounded transition-colors ${isVisible ? "text-green-400 hover:text-green-300" : "text-slate-500 hover:text-slate-400"}`}
+                      title={isVisible ? "Hide section" : "Show section"}
+                    >
+                      {isVisible ? (
+                        <Eye className="w-4 h-4" />
+                      ) : (
+                        <EyeOff className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
+        )}
 
-          {/* Right Column - Blog */}
-          <div className="lg:col-span-1">
-            <BlogSection isAdmin={isAdmin} />
+        {/* Reorder Sections button (admin only, outside reorder mode) */}
+        {isAdmin && !sectionReorderMode && (
+          <div className="mb-4 flex justify-end">
+            <button
+              type="button"
+              onClick={enterReorderMode}
+              data-ocid="sections.reorder_button"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-600 transition-colors"
+            >
+              <GripVertical className="w-3.5 h-3.5" />
+              Reorder &amp; Show/Hide Sections
+            </button>
           </div>
-        </div>
+        )}
+
+        {/* Sections - single column in reorder mode, grid otherwise */}
+        {sectionReorderMode ? (
+          <div className="space-y-8">
+            {tempOrder.map((key) => {
+              if (!tempVisibility[key as keyof typeof tempVisibility])
+                return null;
+              if (key === "about")
+                return (
+                  <CaffeineInfoSection
+                    key="about"
+                    isAdmin={isAdmin}
+                    cardBgStyle={getCardBgStyle(
+                      backgroundConfig?.aboutCardImageUrl,
+                      backgroundConfig?.aboutCardColor,
+                    )}
+                  />
+                );
+              if (key === "links")
+                return (
+                  <LinksSection
+                    key="links"
+                    isAdmin={isAdmin}
+                    cardBgStyle={getCardBgStyle(
+                      backgroundConfig?.linksCardImageUrl,
+                      backgroundConfig?.linksCardColor,
+                    )}
+                  />
+                );
+              if (key === "blog")
+                return (
+                  <BlogSection
+                    key="blog"
+                    isAdmin={isAdmin}
+                    cardBgStyle={getCardBgStyle(
+                      backgroundConfig?.blogCardImageUrl,
+                      backgroundConfig?.blogCardColor,
+                    )}
+                  />
+                );
+              return null;
+            })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Left column: first two sections in order */}
+            <div className="lg:col-span-2 space-y-8">
+              {sectionOrder
+                .filter(
+                  (k) =>
+                    k !==
+                    (sectionOrder.find(
+                      (s) =>
+                        !sectionOrder
+                          .slice(0, sectionOrder.indexOf(s))
+                          .some(() => false),
+                    ) === sectionOrder[sectionOrder.length - 1]
+                      ? sectionOrder[sectionOrder.length - 1]
+                      : sectionOrder[sectionOrder.length - 1]),
+                )
+                .slice(0, 2)
+                .map((key) => {
+                  if (!sectionVisibility[key as keyof typeof sectionVisibility])
+                    return null;
+                  if (key === "about")
+                    return (
+                      <CaffeineInfoSection
+                        key="about"
+                        isAdmin={isAdmin}
+                        cardBgStyle={getCardBgStyle(
+                          backgroundConfig?.aboutCardImageUrl,
+                          backgroundConfig?.aboutCardColor,
+                        )}
+                      />
+                    );
+                  if (key === "links")
+                    return (
+                      <LinksSection
+                        key="links"
+                        isAdmin={isAdmin}
+                        cardBgStyle={getCardBgStyle(
+                          backgroundConfig?.linksCardImageUrl,
+                          backgroundConfig?.linksCardColor,
+                        )}
+                      />
+                    );
+                  if (key === "blog")
+                    return (
+                      <BlogSection
+                        key="blog"
+                        isAdmin={isAdmin}
+                        cardBgStyle={getCardBgStyle(
+                          backgroundConfig?.blogCardImageUrl,
+                          backgroundConfig?.blogCardColor,
+                        )}
+                      />
+                    );
+                  return null;
+                })}
+            </div>
+            {/* Right column: last section in order */}
+            <div className="lg:col-span-1">
+              {(() => {
+                const lastKey = sectionOrder[sectionOrder.length - 1];
+                if (
+                  !lastKey ||
+                  !sectionVisibility[lastKey as keyof typeof sectionVisibility]
+                )
+                  return null;
+                if (lastKey === "about")
+                  return (
+                    <CaffeineInfoSection
+                      isAdmin={isAdmin}
+                      cardBgStyle={getCardBgStyle(
+                        backgroundConfig?.aboutCardImageUrl,
+                        backgroundConfig?.aboutCardColor,
+                      )}
+                    />
+                  );
+                if (lastKey === "links")
+                  return (
+                    <LinksSection
+                      isAdmin={isAdmin}
+                      cardBgStyle={getCardBgStyle(
+                        backgroundConfig?.linksCardImageUrl,
+                        backgroundConfig?.linksCardColor,
+                      )}
+                    />
+                  );
+                if (lastKey === "blog")
+                  return (
+                    <BlogSection
+                      isAdmin={isAdmin}
+                      cardBgStyle={getCardBgStyle(
+                        backgroundConfig?.blogCardImageUrl,
+                        backgroundConfig?.blogCardColor,
+                      )}
+                    />
+                  );
+                return null;
+              })()}
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Footer */}
       <footer className="bg-slate-800 border-t border-slate-700 mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="text-center text-slate-400">
-            © 2025. Built with <Heart className="inline w-4 h-4 text-red-500" />{" "}
+          <div className="text-center text-slate-400 text-xs">
+            © 2025. Built with <Heart className="inline w-3 h-3 text-red-500" />{" "}
             using{" "}
             <a
               href="https://caffeine.ai"

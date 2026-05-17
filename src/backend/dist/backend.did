@@ -13,8 +13,18 @@ type UserRole =
  };
 type UserProfile = record {name: text;};
 type Time = int;
+type SiteStatistics = 
+ record {
+   backendCanisterId: text;
+   blogPostsCount: nat;
+   infoScreensCount: nat;
+   linksCount: nat;
+   visitCount: nat;
+ };
 type HeadingConfig = 
  record {
+   backgroundColor: opt text;
+   backgroundImageUrl: opt text;
    color: text;
    font: text;
    "text": text;
@@ -23,6 +33,7 @@ type CaffeineInfoScreenRecord =
  record {
    content: text;
    id: text;
+   mediaUrl: opt text;
    order: nat;
    title: text;
  };
@@ -39,6 +50,17 @@ type BlogPost =
    timestamp: Time;
    title: text;
  };
+type BackgroundConfig = 
+ record {
+   aboutCardColor: opt text;
+   aboutCardImageUrl: opt text;
+   blogCardColor: opt text;
+   blogCardImageUrl: opt text;
+   linksCardColor: opt text;
+   linksCardImageUrl: opt text;
+   pageBackgroundColor: opt text;
+   pageBackgroundImageUrl: opt text;
+ };
 service : {
   addBlogPost: (title: text, content: text) -> ();
   addWebLink: (title: text, url: text, description: text) -> ();
@@ -50,6 +72,8 @@ service : {
   getAllAdminPrincipals: () -> (vec principal) query;
   getAllBlogPosts: () -> (vec BlogPost) query;
   getAllWebLinks: () -> (vec WebLink) query;
+  getBackendCanisterId: () -> (text) query;
+  getBackgroundConfig: () -> (BackgroundConfig) query;
   getCaffeineInfo: () -> (opt CaffeineInfo) query;
   getCaffeineInfoConfig: () ->
    (record {
@@ -58,17 +82,43 @@ service : {
     }) query;
   getCallerUserProfile: () -> (opt UserProfile) query;
   getCallerUserRole: () -> (UserRole) query;
+  getFrontendCanisterId: () -> (text) query;
   getHeadingConfig: () -> (HeadingConfig) query;
   getOrderedWebLinks: () -> (vec WebLink) query;
+  getSectionNames: () -> (record {
+                            about: text;
+                            blog: text;
+                            links: text;
+                          }) query;
+  getSectionOrder: () -> (vec text) query;
+  getSectionVisibility: () ->
+   (record {
+      about: bool;
+      blog: bool;
+      links: bool;
+    }) query;
+  getSiteStatistics: () -> (SiteStatistics) query;
   getUserProfile: (user: principal) -> (opt UserProfile) query;
   getVisitCount: () -> (nat) query;
   incrementVisitCount: () -> ();
   initializeAccessControl: () -> ();
   isCallerAdmin: () -> (bool) query;
+  reorderCaffeineInfoScreens: (newOrder: vec text) -> ();
   reorderWebLinks: (newOrder: vec nat) -> ();
   saveCallerUserProfile: (profile: UserProfile) -> ();
+  setFrontendCanisterId: (id: text) -> ();
+  setSectionName: (section: text, name: text) -> ();
+  setSectionOrder: (order: vec text) -> ();
+  setSectionVisibility: (visibility:
+   record {
+     about: bool;
+     blog: bool;
+     links: bool;
+   }) -> ();
+  updateBackgroundConfig: (config: BackgroundConfig) -> ();
   updateCaffeineInfo: (content: text) -> ();
   updateCaffeineInfoConfig: (sectionTitle: text, screens:
    vec CaffeineInfoScreenRecord) -> ();
-  updateHeadingConfig: ("text": text, font: text, color: text) -> ();
+  updateHeadingConfig: ("text": text, font: text, color: text,
+   backgroundColor: opt text, backgroundImageUrl: opt text) -> ();
 }

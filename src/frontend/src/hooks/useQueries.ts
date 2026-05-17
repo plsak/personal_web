@@ -22,6 +22,8 @@ interface HeadingConfig {
   text: string;
   font: string;
   color: string;
+  backgroundColor?: string;
+  backgroundImageUrl?: string;
 }
 
 // User Profile Queries
@@ -70,7 +72,6 @@ export function useIsCallerAdmin() {
       return actor.isCallerAdmin();
     },
     enabled: !!actor && !isFetching,
-    staleTime: 5 * 60 * 1000, // 5 minutes — prevents frequent refetch that blocks loading gate
   });
 }
 
@@ -149,15 +150,7 @@ export function useGetHeadingConfig() {
     queryKey: ["headingConfig"],
     queryFn: async () => {
       if (!actor) return null;
-      // Try the new method first, fallback to defaults if not available
-      try {
-        if ("getHeadingConfig" in actor) {
-          return (actor as any).getHeadingConfig();
-        }
-      } catch (_error) {
-        console.warn("Heading config method not available, using defaults");
-      }
-      return null;
+      return actor.getHeadingConfig();
     },
     enabled: !!actor && !isFetching,
   });
@@ -170,17 +163,45 @@ export function useUpdateHeadingConfig() {
   return useMutation({
     mutationFn: async (config: HeadingConfig) => {
       if (!actor) throw new Error("Actor not available");
-      if ("updateHeadingConfig" in actor) {
-        return (actor as any).updateHeadingConfig(
-          config.text,
-          config.font,
-          config.color,
-        );
-      }
-      throw new Error("Heading config update method not available");
+      return actor.updateHeadingConfig(
+        config.text,
+        config.font,
+        config.color,
+        config.backgroundColor ?? null,
+        config.backgroundImageUrl ?? null,
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["headingConfig"] });
+    },
+  });
+}
+
+// Background Config Queries
+export function useGetBackgroundConfig() {
+  const { actor, isFetching } = useActor(createActor);
+
+  return useQuery<import("../backend").BackgroundConfig>({
+    queryKey: ["backgroundConfig"],
+    queryFn: async () => {
+      if (!actor) return {};
+      return actor.getBackgroundConfig();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useUpdateBackgroundConfig() {
+  const { actor } = useActor(createActor);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (config: import("../backend").BackgroundConfig) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.updateBackgroundConfig(config);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["backgroundConfig"] });
     },
   });
 }
@@ -222,6 +243,7 @@ export function useAddBlogPost() {
       // Only invalidate after successful mutation
       queryClient.invalidateQueries({ queryKey: ["blogPosts"] });
       queryClient.refetchQueries({ queryKey: ["blogPosts"] });
+      queryClient.invalidateQueries({ queryKey: ["siteStatistics"] });
     },
   });
 }
@@ -243,6 +265,7 @@ export function useEditBlogPost() {
       // Only invalidate after successful mutation
       queryClient.invalidateQueries({ queryKey: ["blogPosts"] });
       queryClient.refetchQueries({ queryKey: ["blogPosts"] });
+      queryClient.invalidateQueries({ queryKey: ["siteStatistics"] });
     },
   });
 }
@@ -259,6 +282,7 @@ export function useDeleteBlogPost() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["blogPosts"] });
       queryClient.refetchQueries({ queryKey: ["blogPosts"] });
+      queryClient.invalidateQueries({ queryKey: ["siteStatistics"] });
     },
   });
 }
@@ -295,6 +319,7 @@ export function useAddWebLink() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["webLinks"] });
+      queryClient.invalidateQueries({ queryKey: ["siteStatistics"] });
     },
   });
 }
@@ -315,6 +340,7 @@ export function useEditWebLink() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["webLinks"] });
+      queryClient.invalidateQueries({ queryKey: ["siteStatistics"] });
     },
   });
 }
@@ -330,6 +356,7 @@ export function useDeleteWebLink() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["webLinks"] });
+      queryClient.invalidateQueries({ queryKey: ["siteStatistics"] });
     },
   });
 }
@@ -359,6 +386,111 @@ export function useReorderWebLinks() {
       console.error("Reorder failed:", error);
       // Refetch to restore correct order on error
       queryClient.invalidateQueries({ queryKey: ["webLinks"] });
+    },
+  });
+}
+
+// Section Names Queries
+export function useGetSectionNames() {
+  const { actor, isFetching } = useActor(createActor);
+
+  return useQuery<{ about: string; blog: string; links: string }>({
+    queryKey: ["sectionNames"],
+    queryFn: async () => {
+      if (!actor) return { about: "About", blog: "Blog", links: "Links" };
+      return actor.getSectionNames();
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useSetSectionName() {
+  const { actor } = useActor(createActor);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      section,
+      name,
+    }: { section: string; name: string }) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.setSectionName(section, name);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sectionNames"] });
+    },
+  });
+}
+
+// Canister ID Queries
+export function useGetBackendCanisterId() {
+  const { actor, isFetching } = useActor(createActor);
+
+  return useQuery<string>({
+    queryKey: ["backendCanisterId"],
+    queryFn: async () => {
+      if (!actor) return "";
+      return actor.getBackendCanisterId();
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
+export function useGetFrontendCanisterId() {
+  const { actor, isFetching } = useActor(createActor);
+
+  return useQuery<string>({
+    queryKey: ["frontendCanisterId"],
+    queryFn: async () => {
+      // 1. Try Vite env var injected at build time (import.meta.env, not process.env)
+      const viteEnvId =
+        (import.meta.env as Record<string, string | undefined>)
+          .CANISTER_ID_FRONTEND || "";
+      if (viteEnvId) return viteEnvId;
+
+      // 2. Extract canister ID from ICP hostname (e.g. <canisterId>.icp0.io or <canisterId>.raw.icp0.io)
+      const hostname = window.location.hostname;
+      const icpMatch = hostname.match(
+        /^([a-z0-9-]{5,}-[a-z0-9-]{3,}-[a-z0-9-]{3,}-[a-z0-9-]{3,}-[a-z0-9]{3,})\.(?:raw\.)?icp0\.io$/,
+      );
+      if (icpMatch) return icpMatch[1];
+
+      // 3. Localhost dev — canister ID embedded in hostname by DFX proxy
+      const localMatch = hostname.match(
+        /^([a-z0-9-]{5,}-[a-z0-9-]{3,}-[a-z0-9-]{3,}-[a-z0-9-]{3,}-[a-z0-9]{3,})(?:\.localhost)?$/,
+      );
+      if (localMatch) return localMatch[1];
+
+      // 4. Try the backend API as last resort (stored by admin on first load)
+      if (actor && !isFetching) {
+        try {
+          const stored = await actor.getFrontendCanisterId();
+          if (stored) return stored;
+        } catch {
+          // ignore — backend call is best-effort
+        }
+      }
+
+      return "";
+    },
+    enabled: true,
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
+export function useSetFrontendCanisterId() {
+  const { actor } = useActor(createActor);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.setFrontendCanisterId(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["frontendCanisterId"] });
     },
   });
 }
@@ -424,6 +556,7 @@ export function useUpdateCaffeineInfoConfig() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["caffeineInfoConfig"] });
       queryClient.invalidateQueries({ queryKey: ["caffeineInfo"] });
+      queryClient.invalidateQueries({ queryKey: ["siteStatistics"] });
     },
   });
 }
@@ -518,5 +651,112 @@ export function useDeleteCaffeineInfoScreen() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["caffeineInfoConfig"] });
     },
+  });
+}
+export function useReorderCaffeineInfoScreens() {
+  const { actor } = useActor(createActor);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (newOrder: string[]) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.reorderCaffeineInfoScreens(newOrder);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["caffeineInfoConfig"] });
+      queryClient.refetchQueries({ queryKey: ["caffeineInfoConfig"] });
+      queryClient.invalidateQueries({ queryKey: ["siteStatistics"] });
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ["caffeineInfoConfig"] });
+    },
+  });
+}
+
+// Section Order Queries
+export function useGetSectionOrder() {
+  const { actor, isFetching } = useActor(createActor);
+
+  return useQuery<string[]>({
+    queryKey: ["sectionOrder"],
+    queryFn: async () => {
+      if (!actor) return ["about", "links", "blog"];
+      return actor.getSectionOrder();
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useSetSectionOrder() {
+  const { actor } = useActor(createActor);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (order: string[]) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.setSectionOrder(order);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sectionOrder"] });
+      queryClient.refetchQueries({ queryKey: ["sectionOrder"] });
+    },
+  });
+}
+
+// Section Visibility Queries
+export function useGetSectionVisibility() {
+  const { actor, isFetching } = useActor(createActor);
+
+  return useQuery<{ about: boolean; links: boolean; blog: boolean }>({
+    queryKey: ["sectionVisibility"],
+    queryFn: async () => {
+      if (!actor) return { about: true, links: true, blog: true };
+      return actor.getSectionVisibility();
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useSetSectionVisibility() {
+  const { actor } = useActor(createActor);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (visibility: {
+      about: boolean;
+      links: boolean;
+      blog: boolean;
+    }) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.setSectionVisibility(visibility);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sectionVisibility"] });
+      queryClient.refetchQueries({ queryKey: ["sectionVisibility"] });
+    },
+  });
+}
+
+// Site Statistics Query
+export function useGetSiteStatistics() {
+  const { actor, isFetching } = useActor(createActor);
+
+  return useQuery<import("../backend").SiteStatistics>({
+    queryKey: ["siteStatistics"],
+    queryFn: async () => {
+      if (!actor)
+        return {
+          visitCount: 0n,
+          linksCount: 0n,
+          blogPostsCount: 0n,
+          infoScreensCount: 0n,
+          backendCanisterId: "",
+        };
+      return actor.getSiteStatistics();
+    },
+    enabled: !!actor && !isFetching,
+    refetchInterval: 30000,
   });
 }

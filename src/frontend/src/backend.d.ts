@@ -14,11 +14,30 @@ export interface BlogPost {
     author: Principal;
     timestamp: Time;
 }
+export interface BackgroundConfig {
+    blogCardImageUrl?: string;
+    linksCardImageUrl?: string;
+    aboutCardColor?: string;
+    linksCardColor?: string;
+    aboutCardImageUrl?: string;
+    pageBackgroundImageUrl?: string;
+    pageBackgroundColor?: string;
+    blogCardColor?: string;
+}
 export type Time = bigint;
 export interface HeadingConfig {
+    backgroundColor?: string;
+    backgroundImageUrl?: string;
     font: string;
     color: string;
     text: string;
+}
+export interface SiteStatistics {
+    visitCount: bigint;
+    blogPostsCount: bigint;
+    linksCount: bigint;
+    backendCanisterId: string;
+    infoScreensCount: bigint;
 }
 export interface WebLink {
     id: bigint;
@@ -35,6 +54,7 @@ export interface CaffeineInfoScreenRecord {
     title: string;
     content: string;
     order: bigint;
+    mediaUrl?: string;
 }
 export interface UserProfile {
     name: string;
@@ -55,6 +75,8 @@ export interface backendInterface {
     getAllAdminPrincipals(): Promise<Array<Principal>>;
     getAllBlogPosts(): Promise<Array<BlogPost>>;
     getAllWebLinks(): Promise<Array<WebLink>>;
+    getBackendCanisterId(): Promise<string>;
+    getBackgroundConfig(): Promise<BackgroundConfig>;
     getCaffeineInfo(): Promise<CaffeineInfo | null>;
     getCaffeineInfoConfig(): Promise<{
         screens: Array<CaffeineInfoScreenRecord>;
@@ -62,16 +84,39 @@ export interface backendInterface {
     }>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
+    getFrontendCanisterId(): Promise<string>;
     getHeadingConfig(): Promise<HeadingConfig>;
     getOrderedWebLinks(): Promise<Array<WebLink>>;
+    getSectionNames(): Promise<{
+        about: string;
+        blog: string;
+        links: string;
+    }>;
+    getSectionOrder(): Promise<Array<string>>;
+    getSectionVisibility(): Promise<{
+        about: boolean;
+        blog: boolean;
+        links: boolean;
+    }>;
+    getSiteStatistics(): Promise<SiteStatistics>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getVisitCount(): Promise<bigint>;
     incrementVisitCount(): Promise<void>;
     initializeAccessControl(): Promise<void>;
     isCallerAdmin(): Promise<boolean>;
+    reorderCaffeineInfoScreens(newOrder: Array<string>): Promise<void>;
     reorderWebLinks(newOrder: Array<bigint>): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    setFrontendCanisterId(id: string): Promise<void>;
+    setSectionName(section: string, name: string): Promise<void>;
+    setSectionOrder(order: Array<string>): Promise<void>;
+    setSectionVisibility(visibility: {
+        about: boolean;
+        blog: boolean;
+        links: boolean;
+    }): Promise<void>;
+    updateBackgroundConfig(config: BackgroundConfig): Promise<void>;
     updateCaffeineInfo(content: string): Promise<void>;
     updateCaffeineInfoConfig(sectionTitle: string, screens: Array<CaffeineInfoScreenRecord>): Promise<void>;
-    updateHeadingConfig(text: string, font: string, color: string): Promise<void>;
+    updateHeadingConfig(text: string, font: string, color: string, backgroundColor: string | null, backgroundImageUrl: string | null): Promise<void>;
 }

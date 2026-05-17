@@ -27,6 +27,16 @@ export const WebLink = IDL.Record({
   'title' : IDL.Text,
   'description' : IDL.Text,
 });
+export const BackgroundConfig = IDL.Record({
+  'blogCardImageUrl' : IDL.Opt(IDL.Text),
+  'linksCardImageUrl' : IDL.Opt(IDL.Text),
+  'aboutCardColor' : IDL.Opt(IDL.Text),
+  'linksCardColor' : IDL.Opt(IDL.Text),
+  'aboutCardImageUrl' : IDL.Opt(IDL.Text),
+  'pageBackgroundImageUrl' : IDL.Opt(IDL.Text),
+  'pageBackgroundColor' : IDL.Opt(IDL.Text),
+  'blogCardColor' : IDL.Opt(IDL.Text),
+});
 export const CaffeineInfo = IDL.Record({
   'content' : IDL.Text,
   'lastUpdated' : Time,
@@ -36,12 +46,22 @@ export const CaffeineInfoScreenRecord = IDL.Record({
   'title' : IDL.Text,
   'content' : IDL.Text,
   'order' : IDL.Nat,
+  'mediaUrl' : IDL.Opt(IDL.Text),
 });
 export const UserProfile = IDL.Record({ 'name' : IDL.Text });
 export const HeadingConfig = IDL.Record({
+  'backgroundColor' : IDL.Opt(IDL.Text),
+  'backgroundImageUrl' : IDL.Opt(IDL.Text),
   'font' : IDL.Text,
   'color' : IDL.Text,
   'text' : IDL.Text,
+});
+export const SiteStatistics = IDL.Record({
+  'visitCount' : IDL.Nat,
+  'blogPostsCount' : IDL.Nat,
+  'linksCount' : IDL.Nat,
+  'backendCanisterId' : IDL.Text,
+  'infoScreensCount' : IDL.Nat,
 });
 
 export const idlService = IDL.Service({
@@ -55,6 +75,8 @@ export const idlService = IDL.Service({
   'getAllAdminPrincipals' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
   'getAllBlogPosts' : IDL.Func([], [IDL.Vec(BlogPost)], ['query']),
   'getAllWebLinks' : IDL.Func([], [IDL.Vec(WebLink)], ['query']),
+  'getBackendCanisterId' : IDL.Func([], [IDL.Text], ['query']),
+  'getBackgroundConfig' : IDL.Func([], [BackgroundConfig], ['query']),
   'getCaffeineInfo' : IDL.Func([], [IDL.Opt(CaffeineInfo)], ['query']),
   'getCaffeineInfoConfig' : IDL.Func(
       [],
@@ -68,8 +90,33 @@ export const idlService = IDL.Service({
     ),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+  'getFrontendCanisterId' : IDL.Func([], [IDL.Text], ['query']),
   'getHeadingConfig' : IDL.Func([], [HeadingConfig], ['query']),
   'getOrderedWebLinks' : IDL.Func([], [IDL.Vec(WebLink)], ['query']),
+  'getSectionNames' : IDL.Func(
+      [],
+      [
+        IDL.Record({
+          'about' : IDL.Text,
+          'blog' : IDL.Text,
+          'links' : IDL.Text,
+        }),
+      ],
+      ['query'],
+    ),
+  'getSectionOrder' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
+  'getSectionVisibility' : IDL.Func(
+      [],
+      [
+        IDL.Record({
+          'about' : IDL.Bool,
+          'blog' : IDL.Bool,
+          'links' : IDL.Bool,
+        }),
+      ],
+      ['query'],
+    ),
+  'getSiteStatistics' : IDL.Func([], [SiteStatistics], ['query']),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
       [IDL.Opt(UserProfile)],
@@ -79,15 +126,35 @@ export const idlService = IDL.Service({
   'incrementVisitCount' : IDL.Func([], [], []),
   'initializeAccessControl' : IDL.Func([], [], []),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'reorderCaffeineInfoScreens' : IDL.Func([IDL.Vec(IDL.Text)], [], []),
   'reorderWebLinks' : IDL.Func([IDL.Vec(IDL.Nat)], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+  'setFrontendCanisterId' : IDL.Func([IDL.Text], [], []),
+  'setSectionName' : IDL.Func([IDL.Text, IDL.Text], [], []),
+  'setSectionOrder' : IDL.Func([IDL.Vec(IDL.Text)], [], []),
+  'setSectionVisibility' : IDL.Func(
+      [
+        IDL.Record({
+          'about' : IDL.Bool,
+          'blog' : IDL.Bool,
+          'links' : IDL.Bool,
+        }),
+      ],
+      [],
+      [],
+    ),
+  'updateBackgroundConfig' : IDL.Func([BackgroundConfig], [], []),
   'updateCaffeineInfo' : IDL.Func([IDL.Text], [], []),
   'updateCaffeineInfoConfig' : IDL.Func(
       [IDL.Text, IDL.Vec(CaffeineInfoScreenRecord)],
       [],
       [],
     ),
-  'updateHeadingConfig' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+  'updateHeadingConfig' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+      [],
+      [],
+    ),
 });
 
 export const idlInitArgs = [];
@@ -112,6 +179,16 @@ export const idlFactory = ({ IDL }) => {
     'title' : IDL.Text,
     'description' : IDL.Text,
   });
+  const BackgroundConfig = IDL.Record({
+    'blogCardImageUrl' : IDL.Opt(IDL.Text),
+    'linksCardImageUrl' : IDL.Opt(IDL.Text),
+    'aboutCardColor' : IDL.Opt(IDL.Text),
+    'linksCardColor' : IDL.Opt(IDL.Text),
+    'aboutCardImageUrl' : IDL.Opt(IDL.Text),
+    'pageBackgroundImageUrl' : IDL.Opt(IDL.Text),
+    'pageBackgroundColor' : IDL.Opt(IDL.Text),
+    'blogCardColor' : IDL.Opt(IDL.Text),
+  });
   const CaffeineInfo = IDL.Record({
     'content' : IDL.Text,
     'lastUpdated' : Time,
@@ -121,12 +198,22 @@ export const idlFactory = ({ IDL }) => {
     'title' : IDL.Text,
     'content' : IDL.Text,
     'order' : IDL.Nat,
+    'mediaUrl' : IDL.Opt(IDL.Text),
   });
   const UserProfile = IDL.Record({ 'name' : IDL.Text });
   const HeadingConfig = IDL.Record({
+    'backgroundColor' : IDL.Opt(IDL.Text),
+    'backgroundImageUrl' : IDL.Opt(IDL.Text),
     'font' : IDL.Text,
     'color' : IDL.Text,
     'text' : IDL.Text,
+  });
+  const SiteStatistics = IDL.Record({
+    'visitCount' : IDL.Nat,
+    'blogPostsCount' : IDL.Nat,
+    'linksCount' : IDL.Nat,
+    'backendCanisterId' : IDL.Text,
+    'infoScreensCount' : IDL.Nat,
   });
   
   return IDL.Service({
@@ -140,6 +227,8 @@ export const idlFactory = ({ IDL }) => {
     'getAllAdminPrincipals' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
     'getAllBlogPosts' : IDL.Func([], [IDL.Vec(BlogPost)], ['query']),
     'getAllWebLinks' : IDL.Func([], [IDL.Vec(WebLink)], ['query']),
+    'getBackendCanisterId' : IDL.Func([], [IDL.Text], ['query']),
+    'getBackgroundConfig' : IDL.Func([], [BackgroundConfig], ['query']),
     'getCaffeineInfo' : IDL.Func([], [IDL.Opt(CaffeineInfo)], ['query']),
     'getCaffeineInfoConfig' : IDL.Func(
         [],
@@ -153,8 +242,33 @@ export const idlFactory = ({ IDL }) => {
       ),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+    'getFrontendCanisterId' : IDL.Func([], [IDL.Text], ['query']),
     'getHeadingConfig' : IDL.Func([], [HeadingConfig], ['query']),
     'getOrderedWebLinks' : IDL.Func([], [IDL.Vec(WebLink)], ['query']),
+    'getSectionNames' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'about' : IDL.Text,
+            'blog' : IDL.Text,
+            'links' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'getSectionOrder' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
+    'getSectionVisibility' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'about' : IDL.Bool,
+            'blog' : IDL.Bool,
+            'links' : IDL.Bool,
+          }),
+        ],
+        ['query'],
+      ),
+    'getSiteStatistics' : IDL.Func([], [SiteStatistics], ['query']),
     'getUserProfile' : IDL.Func(
         [IDL.Principal],
         [IDL.Opt(UserProfile)],
@@ -164,15 +278,35 @@ export const idlFactory = ({ IDL }) => {
     'incrementVisitCount' : IDL.Func([], [], []),
     'initializeAccessControl' : IDL.Func([], [], []),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'reorderCaffeineInfoScreens' : IDL.Func([IDL.Vec(IDL.Text)], [], []),
     'reorderWebLinks' : IDL.Func([IDL.Vec(IDL.Nat)], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+    'setFrontendCanisterId' : IDL.Func([IDL.Text], [], []),
+    'setSectionName' : IDL.Func([IDL.Text, IDL.Text], [], []),
+    'setSectionOrder' : IDL.Func([IDL.Vec(IDL.Text)], [], []),
+    'setSectionVisibility' : IDL.Func(
+        [
+          IDL.Record({
+            'about' : IDL.Bool,
+            'blog' : IDL.Bool,
+            'links' : IDL.Bool,
+          }),
+        ],
+        [],
+        [],
+      ),
+    'updateBackgroundConfig' : IDL.Func([BackgroundConfig], [], []),
     'updateCaffeineInfo' : IDL.Func([IDL.Text], [], []),
     'updateCaffeineInfoConfig' : IDL.Func(
         [IDL.Text, IDL.Vec(CaffeineInfoScreenRecord)],
         [],
         [],
       ),
-    'updateHeadingConfig' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+    'updateHeadingConfig' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [],
+        [],
+      ),
   });
 };
 

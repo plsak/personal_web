@@ -362,7 +362,10 @@ export default function EmojiPicker({
   const [searchTerm, setSearchTerm] = useState("");
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  // Close picker when clicking outside
+  // Close picker when clicking outside.
+  // Use a short timeout so the listener is registered AFTER the current event
+  // that opened the picker finishes bubbling — otherwise the opening click
+  // immediately triggers this handler and closes the picker.
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -373,8 +376,14 @@ export default function EmojiPicker({
       }
     };
 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    const timerId = window.setTimeout(() => {
+      document.addEventListener("mousedown", handleClickOutside);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, [onClose]);
 
   // Filter emojis based on search term

@@ -1,30 +1,39 @@
+import { stripInlineTextAlign } from "@/utils/htmlUtils";
 import {
   ArrowUpDown,
   Edit2,
   ExternalLink,
   GripVertical,
   Link,
+  Pencil,
   Plus,
   Save,
   Trash2,
   X,
 } from "lucide-react";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { WebLink } from "../backend";
 import {
   useAddWebLink,
   useDeleteWebLink,
   useEditWebLink,
   useGetAllWebLinks,
+  useGetSectionNames,
   useReorderWebLinks,
+  useSetSectionName,
 } from "../hooks/useQueries";
+import UnifiedTextEditor from "./UnifiedTextEditor";
 
 interface LinksSectionProps {
   isAdmin: boolean;
+  cardBgStyle?: React.CSSProperties;
 }
 
-export default function LinksSection({ isAdmin }: LinksSectionProps) {
+export default function LinksSection({
+  isAdmin,
+  cardBgStyle,
+}: LinksSectionProps) {
   const { data: webLinks = [], isLoading, refetch } = useGetAllWebLinks();
   const addWebLink = useAddWebLink();
   const editWebLink = useEditWebLink();
@@ -64,12 +73,14 @@ export default function LinksSection({ isAdmin }: LinksSectionProps) {
 
   const handleAddLink = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newLink.title.trim() && newLink.url.trim()) {
+    const titleText = newLink.title.replace(/<[^>]*>/g, "").trim();
+    const urlText = newLink.url.trim();
+    if (titleText && urlText) {
       try {
         await addWebLink.mutateAsync({
-          title: newLink.title.trim(),
-          url: newLink.url.trim(),
-          description: newLink.description.trim(),
+          title: newLink.title,
+          url: urlText,
+          description: newLink.description,
         });
         setNewLink({ title: "", url: "", description: "" });
         setIsAdding(false);
@@ -81,35 +92,30 @@ export default function LinksSection({ isAdmin }: LinksSectionProps) {
 
   const handleEditLink = async (e: React.FormEvent) => {
     e.preventDefault();
+    const titleText = editLink.title.replace(/<[^>]*>/g, "").trim();
+    const urlText = editLink.url.trim();
 
-    // Ensure we have valid data before proceeding
-    if (editingId === null || !editLink.title.trim() || !editLink.url.trim()) {
+    if (editingId === null || !titleText || !urlText) {
       console.error("Invalid edit data:", { editingId, editLink });
       return;
     }
 
     try {
-      // Create the mutation payload with explicit type conversion
       const mutationPayload = {
         id: editingId,
-        title: editLink.title.trim(),
-        url: editLink.url.trim(),
-        description: editLink.description.trim() || "", // Ensure description is never undefined
+        title: editLink.title,
+        url: urlText,
+        description: editLink.description || "",
       };
 
       console.log("Saving link edit:", mutationPayload);
-
-      // Execute the mutation and wait for completion
       await editWebLink.mutateAsync(mutationPayload);
-
       console.log("Link edit saved successfully");
 
-      // Only reset state after successful mutation
       setEditingId(null);
       setEditLink({ title: "", url: "", description: "" });
     } catch (error) {
       console.error("Failed to edit web link:", error);
-      // Don't reset state on error so user can retry
     }
   };
 
@@ -315,14 +321,98 @@ export default function LinksSection({ isAdmin }: LinksSectionProps) {
   // Determine which order to display: temp order in reordering mode or actual data
   const displayOrder = isReorderingMode ? tempOrder : webLinks;
 
+  const { data: sectionNames } = useGetSectionNames();
+  const setSectionNameMutation = useSetSectionName();
+  const [editingLinksName, setEditingLinksName] = useState(false);
+  const [pendingLinksName, setPendingLinksName] = useState("");
+
+  const displayLinksName = sectionNames?.links ?? "Links";
+
+  const handleLinksNameClick = () => {
+    if (!isAdmin) return;
+    setPendingLinksName(displayLinksName);
+    setEditingLinksName(true);
+  };
+
+  const saveLinksName = async () => {
+    const stripped = pendingLinksName.replace(/<[^>]*>/g, "").trim();
+    if (stripped) {
+      try {
+        await setSectionNameMutation.mutateAsync({
+          section: "links",
+          name: pendingLinksName,
+        });
+      } catch (e) {
+        console.error("Failed to save links name:", e);
+      }
+    }
+    setEditingLinksName(false);
+  };
+
+  const cancelLinksName = () => {
+    setEditingLinksName(false);
+    setPendingLinksName("");
+  };
+
   return (
-    <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+    <div
+      className="bg-slate-800 rounded-lg p-6 border border-slate-700"
+      style={cardBgStyle}
+    >
       <div className="flex items-center justify-between mb-6">
         <div className="flex-1 flex justify-center">
-          <div className="flex items-center gap-3">
-            <Link className="w-6 h-6 text-green-400" />
-            <h2 className="text-xl font-semibold text-slate-100">Links</h2>
-          </div>
+          {editingLinksName ? (
+            <div className="flex flex-col items-center gap-2 w-full max-w-xs">
+              <UnifiedTextEditor
+                value={pendingLinksName}
+                onChange={setPendingLinksName}
+                placeholder="Section name"
+                showFontPicker
+                showColorPicker
+                minRows={1}
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={saveLinksName}
+                  className="flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs transition-colors"
+                >
+                  <Save className="w-3 h-3" /> Save
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelLinksName}
+                  className="flex items-center gap-1 bg-slate-600 hover:bg-slate-500 text-white px-2 py-1 rounded text-xs transition-colors"
+                >
+                  <X className="w-3 h-3" /> Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <h2
+                className={`text-xl font-semibold text-slate-100 rich-text-content ${isAdmin ? "cursor-pointer hover:text-green-300 transition-colors" : ""}`}
+                onClick={handleLinksNameClick}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ")
+                    handleLinksNameClick();
+                }}
+                role={isAdmin ? "button" : undefined}
+                tabIndex={isAdmin ? 0 : undefined}
+                title={isAdmin ? "Click to rename" : undefined}
+                // biome-ignore lint/security/noDangerouslySetInnerHtml: admin-controlled section name
+                dangerouslySetInnerHTML={{
+                  __html: stripInlineTextAlign(displayLinksName),
+                }}
+              />
+              {isAdmin && (
+                <Pencil
+                  className="w-3 h-3 text-slate-500 hover:text-green-400 cursor-pointer transition-colors"
+                  onClick={handleLinksNameClick}
+                />
+              )}
+            </div>
+          )}
         </div>
         {isAdmin && !isReorderingMode && (
           <div className="flex gap-2">
@@ -393,35 +483,34 @@ export default function LinksSection({ isAdmin }: LinksSectionProps) {
           onSubmit={handleAddLink}
           className="mb-6 p-4 bg-slate-700 rounded-lg border border-slate-600"
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-            <input
-              type="text"
+          <div className="mb-3">
+            <UnifiedTextEditor
               value={newLink.title}
-              onChange={(e) =>
-                setNewLink({ ...newLink, title: e.target.value })
-              }
+              onChange={(html) => setNewLink({ ...newLink, title: html })}
               placeholder="Link title"
-              className="px-3 py-2 bg-slate-600 border border-slate-500 rounded text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
+              showFontPicker
+              showColorPicker
+              minRows={1}
             />
+          </div>
+          <div className="mb-3">
             <input
               type="url"
               value={newLink.url}
               onChange={(e) => setNewLink({ ...newLink, url: e.target.value })}
               placeholder="https://example.com"
-              className="px-3 py-2 bg-slate-600 border border-slate-500 rounded text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
             />
           </div>
           <div className="mb-3">
-            <input
-              type="text"
+            <UnifiedTextEditor
               value={newLink.description}
-              onChange={(e) =>
-                setNewLink({ ...newLink, description: e.target.value })
-              }
+              onChange={(html) => setNewLink({ ...newLink, description: html })}
               placeholder="Description (optional)"
-              className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              showFontPicker
+              showColorPicker
+              minRows={2}
             />
           </div>
           <div className="flex gap-2">
@@ -498,40 +587,40 @@ export default function LinksSection({ isAdmin }: LinksSectionProps) {
               >
                 {editingId === link.id && !isReorderingMode ? (
                   <form onSubmit={handleEditLink} className="space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <input
-                        type="text"
+                    <div className="mb-1">
+                      <UnifiedTextEditor
                         value={editLink.title}
-                        onChange={(e) =>
-                          setEditLink({ ...editLink, title: e.target.value })
+                        onChange={(html) =>
+                          setEditLink({ ...editLink, title: html })
                         }
-                        className="px-3 py-2 bg-slate-600 border border-slate-500 rounded text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
                         placeholder="Link title"
+                        showFontPicker
+                        showColorPicker
+                        minRows={1}
                       />
+                    </div>
+                    <div>
                       <input
                         type="url"
                         value={editLink.url}
                         onChange={(e) =>
                           setEditLink({ ...editLink, url: e.target.value })
                         }
-                        className="px-3 py-2 bg-slate-600 border border-slate-500 rounded text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required
                         placeholder="https://example.com"
                       />
                     </div>
                     <div>
-                      <input
-                        type="text"
+                      <UnifiedTextEditor
                         value={editLink.description}
-                        onChange={(e) =>
-                          setEditLink({
-                            ...editLink,
-                            description: e.target.value,
-                          })
+                        onChange={(html) =>
+                          setEditLink({ ...editLink, description: html })
                         }
                         placeholder="Description (optional)"
-                        className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        showFontPicker
+                        showColorPicker
+                        minRows={2}
                       />
                     </div>
                     <div className="flex gap-2">
@@ -577,16 +666,22 @@ export default function LinksSection({ isAdmin }: LinksSectionProps) {
                             href={link.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 font-medium transition-colors flex items-center gap-1"
-                          >
-                            {link.title}
-                            <ExternalLink className="w-4 h-4" />
-                          </a>
+                            className="text-blue-400 hover:text-blue-300 font-medium transition-colors flex items-center gap-1 rich-text-content"
+                            // biome-ignore lint/security/noDangerouslySetInnerHtml: admin-edited content
+                            dangerouslySetInnerHTML={{
+                              __html: stripInlineTextAlign(link.title),
+                            }}
+                          />
+                          <ExternalLink className="w-4 h-4 text-blue-400 flex-shrink-0" />
                         </div>
                         {link.description && (
-                          <p className="text-slate-300 text-sm mb-1">
-                            {link.description}
-                          </p>
+                          <div
+                            className="text-slate-300 text-sm mb-1 rich-text-content"
+                            // biome-ignore lint/security/noDangerouslySetInnerHtml: admin-edited content
+                            dangerouslySetInnerHTML={{
+                              __html: stripInlineTextAlign(link.description),
+                            }}
+                          />
                         )}
                         <p className="text-slate-400 text-xs break-all">
                           {link.url}
